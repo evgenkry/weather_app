@@ -38,82 +38,98 @@ def calculate_rolling_mean(df, window=30):
 # Заголовок приложения
 st.title("Прогноз погоды и анализ исторических данных")
 
-# Загрузка файла с данными
-st.sidebar.header("Загрузите файл с данными")
-uploaded_file = st.sidebar.file_uploader("Выберите файл", type=["csv"])
+# Центрируем элементы с помощью CSS
+st.markdown("""
+    <style>
+        .centered-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+    </style>
+""", unsafe_allow_html=True)
 
-if uploaded_file:
-    # Загрузка данных из CSV файла
-    data = load_data(uploaded_file)
+# Контейнер для центрации
+with st.container():
+    st.markdown("<h1 style='text-align: center;'>Прогноз погоды и анализ исторических данных</h1>", unsafe_allow_html=True)
     
-    # Получение списка уникальных городов
-    cities = data['city'].unique()
+    # Загрузка файла с данными
+    uploaded_file = st.file_uploader("Выберите файл", type=["csv"])
     
-    # Выбор города
-    selected_city = st.selectbox("Выберите город", cities)
-    
-    # Отображение данных за выбранный город
-    st.write(f"Данные для города {selected_city}")
-    city_data = data[data['city'] == selected_city]
-    st.write(city_data)
-    
-    # Добавляем столбцы для сезонной статистики
-    seasonal_stats = calculate_seasonal_stats(data)
-    data = pd.merge(data, seasonal_stats, on=['city', 'season'], how='left')
+    if uploaded_file:
+        # Загрузка данных из CSV файла
+        data = load_data(uploaded_file)
+        
+        # Получение списка уникальных городов
+        cities = data['city'].unique()
+        
+        # Выбор города
+        selected_city = st.selectbox("Выберите город", cities)
+        
+        # Отображение данных за выбранный город
+        st.subheader(f"Данные для города {selected_city}")
+        city_data = data[data['city'] == selected_city]
+        st.write(city_data)
+        
+        # Добавляем столбцы для сезонной статистики
+        seasonal_stats = calculate_seasonal_stats(data)
+        data = pd.merge(data, seasonal_stats, on=['city', 'season'], how='left')
 
-    # Вычисляем верхнюю и нижнюю границу для аномалий
-    data['upper_bound'] = data['mean_temperature'] + 2 * data['std_temperature']
-    data['lower_bound'] = data['mean_temperature'] - 2 * data['std_temperature']
+        # Вычисляем верхнюю и нижнюю границу для аномалий
+        data['upper_bound'] = data['mean_temperature'] + 2 * data['std_temperature']
+        data['lower_bound'] = data['mean_temperature'] - 2 * data['std_temperature']
 
-    # Добавляем столбец для аномалий
-    data['is_anomaly'] = (data['temperature'] < data['lower_bound']) | (data['temperature'] > data['upper_bound'])
+        # Добавляем столбец для аномалий
+        data['is_anomaly'] = (data['temperature'] < data['lower_bound']) | (data['temperature'] > data['upper_bound'])
 
-    # Отображаем аномалии
-    anomalies = city_data[city_data['is_anomaly'] == True]
-    st.write("Аномалии для города:", anomalies)
-    
-    # Вычисление и отображение скользящего среднего
-    rolling_means = calculate_rolling_mean(data)
-    data['rolling_mean_30'] = np.nan
-    for city, rm in rolling_means.items():
-        data.loc[data['city'] == city, 'rolling_mean_30'] = rm
+        # Отображаем аномалии
+        anomalies = city_data[city_data['is_anomaly'] == True]
+        st.write("Аномалии для города:", anomalies)
+        
+        # Вычисление и отображение скользящего среднего
+        rolling_means = calculate_rolling_mean(data)
+        data['rolling_mean_30'] = np.nan
+        for city, rm in rolling_means.items():
+            data.loc[data['city'] == city, 'rolling_mean_30'] = rm
 
-    # Вывод графика скользящего среднего
-    plt.figure(figsize=(15, 8))
-    for city in data['city'].unique():
-        city_data = data[data['city'] == city].sort_values('timestamp')
-        plt.plot(city_data['timestamp'], city_data['rolling_mean_30'], label=city, alpha=0.9)
-        anomalies_data = city_data[city_data['is_anomaly'] == True]
-        plt.scatter(anomalies_data['timestamp'], anomalies_data['temperature'], color='red', label=f'Аномалии в {city}')
+        # Вывод графика скользящего среднего
+        plt.figure(figsize=(15, 8))
+        for city in data['city'].unique():
+            city_data = data[data['city'] == city].sort_values('timestamp')
+            plt.plot(city_data['timestamp'], city_data['rolling_mean_30'], label=city, alpha=0.9)
+            anomalies_data = city_data[city_data['is_anomaly'] == True]
+            plt.scatter(anomalies_data['timestamp'], anomalies_data['temperature'], color='red', label=f'Аномалии в {city}')
 
-    plt.xlabel('Дата', fontsize=12)
-    plt.ylabel('Температура (°C)', fontsize=12)
-    plt.title('Cкользящее среднее температуры по городам', fontsize=14)
-    plt.legend(loc='upper right', fontsize=10)
-    plt.grid(True, linestyle='--', alpha=0.6)
-    plt.xticks(rotation=45)
-    plt.tight_layout()
-    st.pyplot(plt)
-    
-    # Ввод API ключа
-    st.sidebar.header("Введите API ключ OpenWeatherMap")
-    api_key = st.sidebar.text_input("API ключ", type="password")
-    
-    # Получение текущей температуры и проверка на аномальность
-    if api_key:
-        temperature, error = get_current_temperature(selected_city, api_key)
-        if error:
-            st.error(error)
-        else:
-            st.write(f"Текущая температура в {selected_city}: {temperature} °C")
-            
-            # Определяем сезон и сравниваем с границами
-            current_season = city_data['season'].iloc[0]  # Примерно для первого дня
-            season_data = city_data[city_data['season'] == current_season]
-            lower_bound = season_data['lower_bound'].iloc[0]
-            upper_bound = season_data['upper_bound'].iloc[0]
-
-            if lower_bound <= temperature <= upper_bound:
-                st.write(f"Температура нормальная для сезона {current_season}.")
+        plt.xlabel('Дата', fontsize=12)
+        plt.ylabel('Температура (°C)', fontsize=12)
+        plt.title('Cкользящее среднее температуры по городам', fontsize=14)
+        plt.legend(loc='upper right', fontsize=10)
+        plt.grid(True, linestyle='--', alpha=0.6)
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+        st.pyplot(plt)
+        
+        # Ввод API ключа
+        st.sidebar.header("Введите API ключ OpenWeatherMap")
+        api_key = st.sidebar.text_input("API ключ", type="password")
+        
+        # Получение текущей температуры и проверка на аномальность
+        if api_key:
+            temperature, error = get_current_temperature(selected_city, api_key)
+            if error:
+                st.error(error)
             else:
-                st.write(f"Температура аномальная для сезона {current_season}.")
+                st.write(f"Текущая температура в {selected_city}: {temperature} °C")
+                
+                # Определяем сезон и сравниваем с границами
+                current_season = city_data['season'].iloc[0]  # Примерно для первого дня
+                season_data = city_data[city_data['season'] == current_season]
+                lower_bound = season_data['lower_bound'].iloc[0]
+                upper_bound = season_data['upper_bound'].iloc[0]
+
+                if lower_bound <= temperature <= upper_bound:
+                    st.write(f"Температура нормальная для сезона {current_season}.")
+                else:
+                    st.write(f"Температура аномальная для сезона {current_season}.")
