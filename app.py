@@ -17,17 +17,26 @@ def get_current_temperature(city, api_key):
     temperature = data['main']['temp'] if 'main' in data else None
     return temperature, None
 
-# Заголовок приложения
-st.markdown("<h1 style='text-align: center;'>Прогноз погоды и анализ исторических данных</h1>", unsafe_allow_html=True)
+# Добавляем немного CSS для выравнивания всех элементов по центру
+st.markdown("""
+    <style>
+        .centered-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+    </style>
+""", unsafe_allow_html=True)
 
-# Центрирование всех элементов
-col1, col2, col3 = st.columns([1, 3, 1])  # Центрируем контент в середине (col2)
-
-with col2:
+# Контейнер для центровки
+with st.container():
+    st.markdown("<h1 style='text-align: center;'>Прогноз погоды и анализ исторических данных</h1>", unsafe_allow_html=True)
+    
     # Загрузка файла с данными
-    st.header("Загрузите файл с данными")
     uploaded_file = st.file_uploader("Выберите файл", type=["csv"])
-
+    
     if uploaded_file:
         # Загрузка данных из CSV файла
         data = load_data(uploaded_file)
@@ -44,8 +53,7 @@ with col2:
         st.write(city_data)
         
         # Ввод API ключа
-        st.header("Введите API ключ OpenWeatherMap")
-        api_key = st.text_input("API ключ", type="password")
+        api_key = st.text_input("Введите API ключ OpenWeatherMap", type="password")
         
         # Получение текущей температуры (если введен правильный ключ)
         if api_key:
