@@ -109,6 +109,9 @@ with st.container():
         # Построение временного ряда температур с выделением аномалий
         st.subheader(f"Временной ряд температур для города {selected_city}")
 
+        # Преобразуем timestamp в datetime, только для этого графика
+        city_data['timestamp'] = pd.to_datetime(city_data['timestamp'])
+
         fig, ax = plt.subplots(figsize=(10, 6))
         sns.lineplot(x='timestamp', y='temperature', data=city_data, ax=ax, label="Температура")
         anomalies = city_data[city_data['is_anomaly'] == True]
@@ -116,15 +119,20 @@ with st.container():
 
         plt.title(f"Температура для {selected_city}")
 
+        # Настройка оси X, чтобы показывать только года
         ax.xaxis.set_major_locator(mdates.YearLocator())
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y'))
 
+        # Поворот меток на оси X для лучшей читаемости
         plt.xticks(rotation=45)
         plt.xlabel("Дата")
         plt.ylabel("Температура (°C)")
         plt.legend()
         plt.tight_layout()
+
+        # Отображение графика
         st.pyplot(fig)
+
 
         # Получение текущей температуры и проверка на аномальность
         api_key = st.text_input("Введите API ключ OpenWeatherMap", type="password")
