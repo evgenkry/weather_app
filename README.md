@@ -2,15 +2,8 @@
 
 Приложение для анализа и визуализации температурных данных с помощью Streamlit.
 
-## Описание
-
-Этот проект включает два компонента:
-
-1. **Notebook** - анализ температурных данных, представленных в формате Jupyter Notebook, с целью извлечения полезной информации и создания визуализаций.
-2. **Streamlit приложение** - веб-приложение, использующее библиотеку Streamlit для интерактивного отображения данных и визуализаций.
-
 ## Структура репозитория
 
-- `notebook.ipynb` — Jupyter Notebook с анализом данных о температуре.
-- `app.py` — исходный код Streamlit приложения.
-- Пример развернутого приложения доступен по [ссылке](https://weatherapp-mhnoy9gajyjmecuiuppzus.streamlit.app).
+- `notebook.ipynb` — ноутбук с анализом данных о температуре https://github.com/evgenkry/weather_app/blob/main/notebook.ipynb
+- `app.py` — исходный код Streamlit приложения https://github.com/evgenkry/weather_app/blob/main/app.py
+- Пример развернутого приложения доступен по ссылке https://weatherapp-mhnoy9gajyjmecuiuppzus.streamlit.app
