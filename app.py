@@ -18,15 +18,23 @@ def get_current_temperature(city, api_key):
     response = requests.get(url)
     if response.status_code == 401:
         return None, "Invalid API key. Please see https://openweathermap.org/faq#error401 for more info."
-    data = response.json()
-    temperature = data['main']['temp'] if 'main' in data else None
-    return temperature, None
+    if response.status_code != 200:
+        return None, f"Error fetching weather data: Status code {response.status_code}"
+    try:
+        data = response.json()
+        temperature = data['main']['temp'] if 'main' in data else None
+        return temperature, None
+    except (KeyError, ValueError):
+        return None, "Error parsing weather data. Check city name or API response."
+
 
 # Функция для вычисления сезонной статистики
-def calculate_seasonal_stats(df):
-    seasonal_stats = df.groupby(['city', 'season'])['temperature'].agg(['mean', 'std', 'min', 'max']).reset_index()
+def calculate_seasonal_stats(df, city):
+    seasonal_stats = df[df['city'] == city].groupby(['season'])['temperature'].agg(['mean', 'std', 'min', 'max']).reset_index()
     seasonal_stats = seasonal_stats.rename(columns={'mean': 'mean_temperature', 'std': 'std_temperature',
                                                     'min': 'min_temperature', 'max': 'max_temperature'})
+    seasonal_stats['upper_bound'] = seasonal_stats['mean_temperature'] + 2 * seasonal_stats['std_temperature']
+    seasonal_stats['lower_bound'] = seasonal_stats['mean_temperature'] - 2 * seasonal_stats['std_temperature']
     return seasonal_stats
 
 # Функция для вычисления годовой статистики
@@ -59,7 +67,15 @@ with st.container():
 
     if uploaded_file:
         # Загрузка данных из CSV файла
-        data = load_data(uploaded_file)
+        try:
+            data = load_data(uploaded_file)
+        except pd.errors.ParserError:
+            st.error("Ошибка при чтении CSV файла. Убедитесь, что файл имеет правильный формат.")
+            st.stop()
+        except Exception as e:
+            st.error(f"Произошла ошибка при загрузке файла: {e}")
+            st.stop()
+
 
         # Получение списка уникальных городов
         cities = data['city'].unique()
@@ -67,26 +83,22 @@ with st.container():
         # Выбор города
         selected_city = st.selectbox("Выберите город", cities)
 
-        # Вычисляем сезонную статистику *ДО* фильтрации по городу
-        seasonal_stats = calculate_seasonal_stats(data)
-        data = pd.merge(data, seasonal_stats, on=['city', 'season'], how='left')
-
-        # Вычисляем верхние и нижние границы для аномалий *ДЛЯ ВСЕГО ДАТАСЕТА*
-        data['upper_bound'] = data['mean_temperature'] + 2 * data['std_temperature']
-        data['lower_bound'] = data['mean_temperature'] - 2 * data['std_temperature']
-
-        # Определяем аномалии *ДЛЯ ВСЕГО ДАТАСЕТА*
-        data['is_anomaly'] = (data['temperature'] < data['lower_bound']) | (data['temperature'] > data['upper_bound'])
-
         # Отображение данных за выбранный город
         st.subheader(f"Данные для города {selected_city}")
-        city_data = data[data['city'] == selected_city].copy() # Важно сделать копию!
+        city_data = data[data['city'] == selected_city].copy()
         st.write(city_data)
+
+        # Вычисляем сезонную статистику *ПОСЛЕ* фильтрации по городу
+        seasonal_stats = calculate_seasonal_stats(data, selected_city)
+
+        # Вычисление аномалий
+        city_data = pd.merge(city_data, seasonal_stats, on=['season'], how='left')
+        city_data['is_anomaly'] = (city_data['temperature'] < city_data['lower_bound']) | (city_data['temperature'] > city_data['upper_bound'])
+
 
         # Описательная статистика по сезонам
         st.subheader("Описательная статистика по сезонам")
-        seasonal_data = seasonal_stats[seasonal_stats['city'] == selected_city]
-        st.dataframe(seasonal_data)
+        st.dataframe(seasonal_stats)
 
         # Описательная статистика по годам
         st.subheader("Описательная статистика по годам")
@@ -94,52 +106,49 @@ with st.container():
         yearly_data = yearly_stats[yearly_stats['city'] == selected_city]
         st.dataframe(yearly_data)
 
-
         # Построение временного ряда температур с выделением аномалий
         st.subheader(f"Временной ряд температур для города {selected_city}")
 
-        # График
         fig, ax = plt.subplots(figsize=(10, 6))
         sns.lineplot(x='timestamp', y='temperature', data=city_data, ax=ax, label="Температура")
         anomalies = city_data[city_data['is_anomaly'] == True]
         ax.scatter(anomalies['timestamp'], anomalies['temperature'], color='red', label="Аномалии", zorder=5)
-        
+
         plt.title(f"Температура для {selected_city}")
-        
-        # Устанавливаем локатор для отображения только годов
+
         ax.xaxis.set_major_locator(mdates.YearLocator())
-        # Устанавливаем форматтер для отображения только года
-        ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y')) # %Y - для полного года (2024), %y - для последних двух цифр (24)
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y'))
 
         plt.xticks(rotation=45)
         plt.xlabel("Дата")
         plt.ylabel("Температура (°C)")
         plt.legend()
-        plt.tight_layout() # Добавлено для предотвращения обрезания меток
+        plt.tight_layout()
         st.pyplot(fig)
 
-        # Получение текущей температуры (если введен правильный ключ)
+        # Получение текущей температуры и проверка на аномальность
         api_key = st.text_input("Введите API ключ OpenWeatherMap", type="password")
 
-        # Получение текущей температуры (если введен правильный ключ)
         if api_key:
             temperature, error = get_current_temperature(selected_city, api_key)
             if error:
                 st.error(error)
-            else:
+            elif temperature is not None:
                 st.write(f"Текущая температура в {selected_city}: {temperature} °C")
 
-                # Проверка нормальности температуры
-                current_season = city_data['season'].iloc[0] # Предполагаем, что сезон одинаковый для всего города
-                season_stats = seasonal_stats[(seasonal_stats['city'] == selected_city) &
-                                                (seasonal_stats['season'] == current_season)]
-                if not season_stats.empty: # Проверка на пустоту, чтобы избежать ошибки IndexError
-                    lower_bound = season_stats['lower_bound'].iloc[0]
-                    upper_bound = season_stats['upper_bound'].iloc[0]
+                if not seasonal_stats.empty:
+                    current_season_data = seasonal_stats[seasonal_stats['season'] == city_data['season'].iloc[0]]
+                    if not current_season_data.empty:
+                        lower_bound = current_season_data['lower_bound'].iloc[0]
+                        upper_bound = current_season_data['upper_bound'].iloc[0]
 
-                    if lower_bound <= temperature <= upper_bound:
-                        st.write(f"Текущая температура нормальна для сезона {current_season}.")
+                        if lower_bound <= temperature <= upper_bound:
+                            st.write(f"Текущая температура нормальна для сезона {city_data['season'].iloc[0]}.")
+                        else:
+                            st.write(f"Текущая температура аномальна для сезона {city_data['season'].iloc[0]}.")
                     else:
-                        st.write(f"Текущая температура аномальна для сезона {current_season}.")
+                        st.write(f"Нет данных о сезонной статистике для {selected_city} в сезоне {city_data['season'].iloc[0]}. Проверка на аномальность невозможна.")
                 else:
-                    st.write(f"Нет данных о сезонной статистике для {selected_city} в сезоне {current_season}. Проверка на аномальность невозможна.")
+                    st.write(f"Нет данных о сезонной статистике для {selected_city}. Проверка на аномальность невозможна.")
+            else:
+                st.write("Не удалось получить текущую температуру.")
