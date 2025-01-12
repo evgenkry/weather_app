@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import requests
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -34,6 +35,15 @@ def calculate_yearly_stats(df):
     yearly_stats = yearly_stats.rename(columns={'mean': 'mean_temperature', 'std': 'std_temperature', 
                                                  'min': 'min_temperature', 'max': 'max_temperature'})
     return yearly_stats
+
+# Функция для вычисления скользящего среднего
+def calculate_rolling_mean(df, window=30):
+    rolling_means = {}
+    for city in df['city'].unique():
+        city_data = df[df['city'] == city].sort_index()
+        rolling_mean = city_data['temperature'].rolling(window=window, center=False).mean()
+        rolling_means[city] = rolling_mean
+    return rolling_means
 
 # Добавляем немного CSS для выравнивания всех элементов по центру
 st.markdown("""
@@ -109,7 +119,7 @@ with st.container():
         plt.legend()
         st.pyplot(fig)
 
-        # Ввод API ключа
+        # Получение текущей температуры (если введен правильный ключ)
         api_key = st.text_input("Введите API ключ OpenWeatherMap", type="password")
         
         # Получение текущей температуры (если введен правильный ключ)
@@ -119,3 +129,15 @@ with st.container():
                 st.error(error)
             else:
                 st.write(f"Текущая температура в {selected_city}: {temperature} °C")
+                
+                # Проверка нормальности температуры
+                current_season = city_data['season'].iloc[0]  # Предполагаем, что сезон одинаковый для всего города
+                season_stats = seasonal_stats[(seasonal_stats['city'] == selected_city) & 
+                                              (seasonal_stats['season'] == current_season)]
+                lower_bound = season_stats['lower_bound'].iloc[0]
+                upper_bound = season_stats['upper_bound'].iloc[0]
+                
+                if lower_bound <= temperature <= upper_bound:
+                    st.write(f"Текущая температура нормальна для сезона {current_season}.")
+                else:
+                    st.write(f"Текущая температура аномальна для сезона {current_season}.")
