@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import requests
-from io import StringIO
 
 # Функция для загрузки и анализа CSV файла
 def load_data(file):
@@ -19,35 +18,39 @@ def get_current_temperature(city, api_key):
     return temperature, None
 
 # Заголовок приложения
-st.title("Прогноз погоды и анализ исторических данных")
+st.markdown("<h1 style='text-align: center;'>Прогноз погоды и анализ исторических данных</h1>", unsafe_allow_html=True)
 
-# Загрузка файла с данными
-st.sidebar.header("Загрузите файл с данными")
-uploaded_file = st.sidebar.file_uploader("Выберите файл", type=["csv"])
+# Центрирование всех элементов
+col1, col2, col3 = st.columns([1, 3, 1])  # Центрируем контент в середине (col2)
 
-if uploaded_file:
-    # Загрузка данных из CSV файла
-    data = load_data(uploaded_file)
-    
-    # Получение списка уникальных городов
-    cities = data['city'].unique()
-    
-    # Выбор города
-    selected_city = st.selectbox("Выберите город", cities)
-    
-    # Отображение данных за выбранный город
-    st.write(f"Данные для города {selected_city}")
-    city_data = data[data['city'] == selected_city]
-    st.write(city_data)
-    
-    # Ввод API ключа
-    st.sidebar.header("Введите API ключ OpenWeatherMap")
-    api_key = st.sidebar.text_input("API ключ", type="password")
-    
-    # Получение текущей температуры (если введен правильный ключ)
-    if api_key:
-        temperature, error = get_current_temperature(selected_city, api_key)
-        if error:
-            st.error(error)
-        else:
-            st.write(f"Текущая температура в {selected_city}: {temperature} °C")
+with col2:
+    # Загрузка файла с данными
+    st.header("Загрузите файл с данными")
+    uploaded_file = st.file_uploader("Выберите файл", type=["csv"])
+
+    if uploaded_file:
+        # Загрузка данных из CSV файла
+        data = load_data(uploaded_file)
+        
+        # Получение списка уникальных городов
+        cities = data['city'].unique()
+        
+        # Выбор города
+        selected_city = st.selectbox("Выберите город", cities)
+        
+        # Отображение данных за выбранный город
+        st.subheader(f"Данные для города {selected_city}")
+        city_data = data[data['city'] == selected_city]
+        st.write(city_data)
+        
+        # Ввод API ключа
+        st.header("Введите API ключ OpenWeatherMap")
+        api_key = st.text_input("API ключ", type="password")
+        
+        # Получение текущей температуры (если введен правильный ключ)
+        if api_key:
+            temperature, error = get_current_temperature(selected_city, api_key)
+            if error:
+                st.error(error)
+            else:
+                st.write(f"Текущая температура в {selected_city}: {temperature} °C")
