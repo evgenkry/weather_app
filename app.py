@@ -129,26 +129,29 @@ with st.container():
         # Получение текущей температуры и проверка на аномальность
         api_key = st.text_input("Введите API ключ OpenWeatherMap", type="password")
 
-        if api_key:
-            temperature, error = get_current_temperature(selected_city, api_key)
-            if error:
-                st.error(error)
-            elif temperature is not None:
-                st.write(f"Текущая температура в {selected_city}: {temperature} °C")
+        if st.button("Узнать текущую температуру"):  # Добавлена кнопка
+            if api_key:
+                with st.spinner("Запрос данных..."):  # Добавлен прелоадер
+                    temperature, error = get_current_temperature(selected_city, api_key)
 
-                if not seasonal_stats.empty:
-                    current_season_data = seasonal_stats[seasonal_stats['season'] == city_data['season'].iloc[0]]
-                    if not current_season_data.empty:
-                        lower_bound = current_season_data['lower_bound'].iloc[0]
-                        upper_bound = current_season_data['upper_bound'].iloc[0]
+                    if error:
+                        st.error(error)
+                    elif temperature is not None:
+                        st.write(f"Текущая температура в {selected_city}: {temperature} °C")
 
-                        if lower_bound <= temperature <= upper_bound:
-                            st.write(f"Текущая температура нормальна для сезона {city_data['season'].iloc[0]}.")
+                        if not seasonal_stats.empty:
+                            current_season_data = seasonal_stats[seasonal_stats['season'] == city_data['season'].iloc[0]]
+                            if not current_season_data.empty:
+                                lower_bound = current_season_data['lower_bound'].iloc[0]
+                                upper_bound = current_season_data['upper_bound'].iloc[0]
+
+                                if lower_bound <= temperature <= upper_bound:
+                                    st.write(f"Текущая температура нормальна для сезона {city_data['season'].iloc[0]}.")
+                                else:
+                                    st.write(f"Текущая температура аномальна для сезона {city_data['season'].iloc[0]}.")
+                            else:
+                                st.write(f"Нет данных о сезонной статистике для {selected_city} в сезоне {city_data['season'].iloc[0]}. Проверка на аномальность невозможна.")
                         else:
-                            st.write(f"Текущая температура аномальна для сезона {city_data['season'].iloc[0]}.")
+                            st.write(f"Нет данных о сезонной статистике для {selected_city}. Проверка на аномальность невозможна.")
                     else:
-                        st.write(f"Нет данных о сезонной статистике для {selected_city} в сезоне {city_data['season'].iloc[0]}. Проверка на аномальность невозможна.")
-                else:
-                    st.write(f"Нет данных о сезонной статистике для {selected_city}. Проверка на аномальность невозможна.")
-            else:
-                st.write("Не удалось получить текущую температуру.")
+                        st.write("Не удалось получить текущую температуру.")
