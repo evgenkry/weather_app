@@ -5,6 +5,7 @@ import requests
 import matplotlib.pyplot as plt
 import seaborn as sns
 from datetime import datetime
+import matplotlib.dates as mdates
 
 # Функция для загрузки и анализа CSV файла
 def load_data(file):
@@ -102,12 +103,19 @@ with st.container():
         sns.lineplot(x='timestamp', y='temperature', data=city_data, ax=ax, label="Температура")
         anomalies = city_data[city_data['is_anomaly'] == True]
         ax.scatter(anomalies['timestamp'], anomalies['temperature'], color='red', label="Аномалии", zorder=5)
-
+        
         plt.title(f"Температура для {selected_city}")
+        
+        # Устанавливаем локатор для отображения только годов
+        ax.xaxis.set_major_locator(mdates.YearLocator())
+        # Устанавливаем форматтер для отображения только года
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y')) # %Y - для полного года (2024), %y - для последних двух цифр (24)
+
         plt.xticks(rotation=45)
         plt.xlabel("Дата")
         plt.ylabel("Температура (°C)")
         plt.legend()
+        plt.tight_layout() # Добавлено для предотвращения обрезания меток
         st.pyplot(fig)
 
         # Получение текущей температуры (если введен правильный ключ)
