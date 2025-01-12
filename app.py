@@ -1,8 +1,9 @@
 import streamlit as st
 import pandas as pd
-import requests
 import numpy as np
+import requests
 import matplotlib.pyplot as plt
+import seaborn as sns
 from datetime import datetime
 
 # Функция для загрузки и анализа CSV файла
@@ -20,11 +21,20 @@ def get_current_temperature(city, api_key):
     temperature = data['main']['temp'] if 'main' in data else None
     return temperature, None
 
-# Функция для вычисления сезонной статистики (среднего и стандартного отклонения)
+# Функция для вычисления сезонной статистики
 def calculate_seasonal_stats(df):
-    seasonal_stats = df.groupby(['city', 'season'])['temperature'].agg(['mean', 'std']).reset_index()
-    seasonal_stats = seasonal_stats.rename(columns={'mean': 'mean_temperature', 'std': 'std_temperature'})
+    seasonal_stats = df.groupby(['city', 'season'])['temperature'].agg(['mean', 'std', 'min', 'max']).reset_index()
+    seasonal_stats = seasonal_stats.rename(columns={'mean': 'mean_temperature', 'std': 'std_temperature', 
+                                                     'min': 'min_temperature', 'max': 'max_temperature'})
     return seasonal_stats
+
+# Функция для вычисления годовой статистики
+def calculate_yearly_stats(df):
+    df['year'] = pd.to_datetime(df['timestamp']).dt.year
+    yearly_stats = df.groupby(['city', 'year'])['temperature'].agg(['mean', 'std', 'min', 'max']).reset_index()
+    yearly_stats = yearly_stats.rename(columns={'mean': 'mean_temperature', 'std': 'std_temperature', 
+                                                 'min': 'min_temperature', 'max': 'max_temperature'})
+    return yearly_stats
 
 # Функция для вычисления скользящего среднего
 def calculate_rolling_mean(df, window=30):
@@ -35,10 +45,7 @@ def calculate_rolling_mean(df, window=30):
         rolling_means[city] = rolling_mean
     return rolling_means
 
-# Заголовок приложения
-st.title("Прогноз погоды и анализ исторических данных")
-
-# Центрируем элементы с помощью CSS
+# Добавляем немного CSS для выравнивания всех элементов по центру
 st.markdown("""
     <style>
         .centered-container {
@@ -51,7 +58,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Контейнер для центрации
+# Контейнер для центровки
 with st.container():
     st.markdown("<h1 style='text-align: center;'>Прогноз погоды и анализ исторических данных</h1>", unsafe_allow_html=True)
     
@@ -73,49 +80,49 @@ with st.container():
         city_data = data[data['city'] == selected_city]
         st.write(city_data)
         
-        # Добавляем столбцы для сезонной статистики
+        # Описательная статистика по сезонам
+        st.subheader("Описательная статистика по сезонам")
+        seasonal_stats = calculate_seasonal_stats(data)
+        seasonal_data = seasonal_stats[seasonal_stats['city'] == selected_city]
+        st.dataframe(seasonal_data)
+
+        # Описательная статистика по годам
+        st.subheader("Описательная статистика по годам")
+        yearly_stats = calculate_yearly_stats(data)
+        yearly_data = yearly_stats[yearly_stats['city'] == selected_city]
+        st.dataframe(yearly_data)
+
+        # Вычисляем сезонную статистику
         seasonal_stats = calculate_seasonal_stats(data)
         data = pd.merge(data, seasonal_stats, on=['city', 'season'], how='left')
 
-        # Вычисляем верхнюю и нижнюю границу для аномалий
+        # Вычисляем верхние и нижние границы для аномалий
         data['upper_bound'] = data['mean_temperature'] + 2 * data['std_temperature']
         data['lower_bound'] = data['mean_temperature'] - 2 * data['std_temperature']
 
-        # Добавляем столбец для аномалий
+        # Определяем аномалии
         data['is_anomaly'] = (data['temperature'] < data['lower_bound']) | (data['temperature'] > data['upper_bound'])
 
-        # Отображаем аномалии
+        # Построение временного ряда температур с выделением аномалий
+        st.subheader(f"Временной ряд температур для города {selected_city}")
+        
+        # График
+        fig, ax = plt.subplots(figsize=(10, 6))
+        sns.lineplot(x='timestamp', y='temperature', data=city_data, ax=ax, label="Температура")
         anomalies = city_data[city_data['is_anomaly'] == True]
-        st.write("Аномалии для города:", anomalies)
+        ax.scatter(anomalies['timestamp'], anomalies['temperature'], color='red', label="Аномалии", zorder=5)
         
-        # Вычисление и отображение скользящего среднего
-        rolling_means = calculate_rolling_mean(data)
-        data['rolling_mean_30'] = np.nan
-        for city, rm in rolling_means.items():
-            data.loc[data['city'] == city, 'rolling_mean_30'] = rm
-
-        # Вывод графика скользящего среднего
-        plt.figure(figsize=(15, 8))
-        for city in data['city'].unique():
-            city_data = data[data['city'] == city].sort_values('timestamp')
-            plt.plot(city_data['timestamp'], city_data['rolling_mean_30'], label=city, alpha=0.9)
-            anomalies_data = city_data[city_data['is_anomaly'] == True]
-            plt.scatter(anomalies_data['timestamp'], anomalies_data['temperature'], color='red', label=f'Аномалии в {city}')
-
-        plt.xlabel('Дата', fontsize=12)
-        plt.ylabel('Температура (°C)', fontsize=12)
-        plt.title('Cкользящее среднее температуры по городам', fontsize=14)
-        plt.legend(loc='upper right', fontsize=10)
-        plt.grid(True, linestyle='--', alpha=0.6)
+        plt.title(f"Температура для {selected_city}")
         plt.xticks(rotation=45)
-        plt.tight_layout()
-        st.pyplot(plt)
+        plt.xlabel("Дата")
+        plt.ylabel("Температура (°C)")
+        plt.legend()
+        st.pyplot(fig)
+
+        # Получение текущей температуры (если введен правильный ключ)
+        api_key = st.text_input("Введите API ключ OpenWeatherMap", type="password")
         
-        # Ввод API ключа
-        st.sidebar.header("Введите API ключ OpenWeatherMap")
-        api_key = st.sidebar.text_input("API ключ", type="password")
-        
-        # Получение текущей температуры и проверка на аномальность
+        # Получение текущей температуры (если введен правильный ключ)
         if api_key:
             temperature, error = get_current_temperature(selected_city, api_key)
             if error:
@@ -123,13 +130,14 @@ with st.container():
             else:
                 st.write(f"Текущая температура в {selected_city}: {temperature} °C")
                 
-                # Определяем сезон и сравниваем с границами
-                current_season = city_data['season'].iloc[0]  # Примерно для первого дня
-                season_data = city_data[city_data['season'] == current_season]
-                lower_bound = season_data['lower_bound'].iloc[0]
-                upper_bound = season_data['upper_bound'].iloc[0]
-
+                # Проверка нормальности температуры
+                current_season = city_data['season'].iloc[0]  # Предполагаем, что сезон одинаковый для всего города
+                season_stats = seasonal_stats[(seasonal_stats['city'] == selected_city) & 
+                                              (seasonal_stats['season'] == current_season)]
+                lower_bound = season_stats['lower_bound'].iloc[0]
+                upper_bound = season_stats['upper_bound'].iloc[0]
+                
                 if lower_bound <= temperature <= upper_bound:
-                    st.write(f"Температура нормальная для сезона {current_season}.")
+                    st.write(f"Текущая температура нормальна для сезона {current_season}.")
                 else:
-                    st.write(f"Температура аномальная для сезона {current_season}.")
+                    st.write(f"Текущая температура аномальна для сезона {current_season}.")
