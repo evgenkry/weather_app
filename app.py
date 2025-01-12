@@ -1,6 +1,9 @@
 import streamlit as st
 import pandas as pd
 import requests
+import matplotlib.pyplot as plt
+import seaborn as sns
+from datetime import datetime
 
 # Функция для загрузки и анализа CSV файла
 def load_data(file):
@@ -16,6 +19,12 @@ def get_current_temperature(city, api_key):
     data = response.json()
     temperature = data['main']['temp'] if 'main' in data else None
     return temperature, None
+
+# Функция для вычисления сезонной статистики
+def calculate_seasonal_stats(df):
+    seasonal_stats = df.groupby(['city', 'season'])['temperature'].agg(['mean', 'std']).reset_index()
+    seasonal_stats = seasonal_stats.rename(columns={'mean': 'mean_temperature', 'std': 'std_temperature'})
+    return seasonal_stats
 
 # Добавляем немного CSS для выравнивания всех элементов по центру
 st.markdown("""
@@ -52,6 +61,37 @@ with st.container():
         city_data = data[data['city'] == selected_city]
         st.write(city_data)
         
+        # Описательная статистика для исторических данных города
+        st.subheader("Описательная статистика по температуре")
+        st.write(city_data['temperature'].describe())
+
+        # Вычисляем сезонную статистику
+        seasonal_stats = calculate_seasonal_stats(data)
+        data = pd.merge(data, seasonal_stats, on=['city', 'season'], how='left')
+
+        # Вычисляем верхние и нижние границы для аномалий
+        data['upper_bound'] = data['mean_temperature'] + 2 * data['std_temperature']
+        data['lower_bound'] = data['mean_temperature'] - 2 * data['std_temperature']
+
+        # Определяем аномалии
+        data['is_anomaly'] = (data['temperature'] < data['lower_bound']) | (data['temperature'] > data['upper_bound'])
+
+        # Построение временного ряда температур с выделением аномалий
+        st.subheader(f"Временной ряд температур для города {selected_city}")
+        
+        # График
+        fig, ax = plt.subplots(figsize=(10, 6))
+        sns.lineplot(x='timestamp', y='temperature', data=city_data, ax=ax, label="Температура")
+        anomalies = city_data[city_data['is_anomaly'] == True]
+        ax.scatter(anomalies['timestamp'], anomalies['temperature'], color='red', label="Аномалии", zorder=5)
+        
+        plt.title(f"Температура для {selected_city}")
+        plt.xticks(rotation=45)
+        plt.xlabel("Дата")
+        plt.ylabel("Температура (°C)")
+        plt.legend()
+        st.pyplot(fig)
+
         # Ввод API ключа
         api_key = st.text_input("Введите API ключ OpenWeatherMap", type="password")
         
@@ -62,3 +102,4 @@ with st.container():
                 st.error(error)
             else:
                 st.write(f"Текущая температура в {selected_city}: {temperature} °C")
+
