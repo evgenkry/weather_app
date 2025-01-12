@@ -22,9 +22,18 @@ def get_current_temperature(city, api_key):
 
 # Функция для вычисления сезонной статистики
 def calculate_seasonal_stats(df):
-    seasonal_stats = df.groupby(['city', 'season'])['temperature'].agg(['mean', 'std']).reset_index()
-    seasonal_stats = seasonal_stats.rename(columns={'mean': 'mean_temperature', 'std': 'std_temperature'})
+    seasonal_stats = df.groupby(['city', 'season'])['temperature'].agg(['mean', 'std', 'min', 'max']).reset_index()
+    seasonal_stats = seasonal_stats.rename(columns={'mean': 'mean_temperature', 'std': 'std_temperature', 
+                                                     'min': 'min_temperature', 'max': 'max_temperature'})
     return seasonal_stats
+
+# Функция для вычисления годовой статистики
+def calculate_yearly_stats(df):
+    df['year'] = pd.to_datetime(df['timestamp']).dt.year
+    yearly_stats = df.groupby(['city', 'year'])['temperature'].agg(['mean', 'std', 'min', 'max']).reset_index()
+    yearly_stats = yearly_stats.rename(columns={'mean': 'mean_temperature', 'std': 'std_temperature', 
+                                                 'min': 'min_temperature', 'max': 'max_temperature'})
+    return yearly_stats
 
 # Добавляем немного CSS для выравнивания всех элементов по центру
 st.markdown("""
@@ -61,9 +70,17 @@ with st.container():
         city_data = data[data['city'] == selected_city]
         st.write(city_data)
         
-        # Описательная статистика для исторических данных города
-        st.subheader("Описательная статистика по температуре")
-        st.write(city_data['temperature'].describe())
+        # Описательная статистика по сезонам
+        st.subheader("Описательная статистика по сезонам")
+        seasonal_stats = calculate_seasonal_stats(data)
+        seasonal_data = seasonal_stats[seasonal_stats['city'] == selected_city]
+        st.dataframe(seasonal_data)
+
+        # Описательная статистика по годам
+        st.subheader("Описательная статистика по годам")
+        yearly_stats = calculate_yearly_stats(data)
+        yearly_data = yearly_stats[yearly_stats['city'] == selected_city]
+        st.dataframe(yearly_data)
 
         # Вычисляем сезонную статистику
         seasonal_stats = calculate_seasonal_stats(data)
@@ -102,4 +119,3 @@ with st.container():
                 st.error(error)
             else:
                 st.write(f"Текущая температура в {selected_city}: {temperature} °C")
-
